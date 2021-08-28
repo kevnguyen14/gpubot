@@ -39,9 +39,10 @@ channels = {
     'rx-6900-xt': 'C026M3AL30T',
     'rx-6700-xt': 'C026T39G9RA',
     'rx-6800': 'C026T39S02Y',
-    'ps5': 'C026T3B93K6'
+    'ps5': 'C026T3B93K6',
+    'xbox': 'C02CPEHLZEW'
 }
-client = WebClient(
+client = 
 
 def send_message_to_channel(name: str, msg: str, sku=None):
     client.chat_postMessage(channel=channels['all-drops'],
@@ -73,6 +74,8 @@ def send_message_to_channel(name: str, msg: str, sku=None):
         ch = channels['rx-6900-xt']
     elif "ps5" in name or "playstation" in name or "sony" in name:
         ch = channels['ps5']
+    elif 'xbox' in name:
+        ch = channels['xbox']
     else:
         ch = 'C024LS4LBCJ'
     try:
@@ -377,6 +380,75 @@ def run_target_bot(store_ids, sku):
             except:
                 continue
 
+def run_target_bot2(skus):
+    stores_in_stock = set()
+    while True:
+        for sku in skus:
+            try:
+                url1 = "https://redsky.target.com/redsky_aggregations/v1/web/pdp_fulfillment_v1"
+                payload1 = {
+                    'key': 'ff457966e64d5e877fdbad070f276d18ecec4a01',
+                    'tcin': sku,
+                    'store_id': '1927',
+                    'store_positions_store_id': '1927',
+                    'has_store_positions_store_id': True,
+                    'scheduled_delivery_store_id': '1927',
+                    'pricing_store_id': '1927',
+                    'useragent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
+                    'visitor_id': '0175BD9F28450201A8D13BFDD94CA6D0',
+                    'latitude': '37.2701301574707',
+                    'longitude': '121.85092163085938',
+                    'state': 'CA',
+                    'zip': '95136',
+                    "has_pricing_store_id": True,
+                    "is_bot": False
+                }
+                jsonData = requests.get(url1, params=payload1).json()
+                pickup_available = True if \
+                jsonData['data']['product']['fulfillment']['store_options'][0][
+                    'order_pickup'][
+                    'availability_status'] == "IN_STOCK" else False
+                shipping_available = True if \
+                jsonData['data']['product']['fulfillment']['shipping_options'][
+                    'availability_status'] == "IN_STOCK" else False
+                stock_text = ""
+                store = jsonData['data']['product']['fulfillment']['store_options'][0]['location_name']
+                # print(f"{store}\nin stock: {True if len(stock_text) else False}")
+                if pickup_available and shipping_available:
+                    stock_text += f"In Store Pickup Or Shipping At {store}"
+                elif pickup_available and not shipping_available:
+                    stock_text += f"In Store Pickup At {store}"
+                elif shipping_available and not pickup_available:
+                    stock_text += "Shipping Available"
+                if stock_text != "" and store_id not in stores_in_stock:
+                    stores_in_stock.add(store_id)
+                    url2 = 'https://redsky.target.com/redsky_aggregations/v1/web/pdp_client_v1'
+                    payload2 = {
+                        'key': 'ff457966e64d5e877fdbad070f276d18ecec4a01',
+                        'tcin': sku,
+                        'store': store_id,
+                        'pricing_store_id': store_id,
+                        'useragent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
+                        'visitor_id': '0175BD9F28450201A8D13BFDD94CA6D0',
+                        'latitude': '37.2701301574707',
+                        'longitude': '121.85092163085938',
+                        'state': 'CA',
+                        'zip': '95136'
+                    }
+                    jsonData = requests.get(url2, params=payload2).json()
+                    name = jsonData['data']['product']['item']['product_description']['title']
+                    price = jsonData['data']['product']['price']['formatted_current_price']
+                    buy_url = jsonData['data']['product']['item']['enrichment']['buy_url']
+                    # notify on slack
+                    date_today = datetime.now(tz=pytz.utc)
+                    date_today = date_today.astimezone(timezone('US/Pacific'))
+                    body = {"text": f"{name}\n{stock_text}:\n{buy_url}\nprice: {price}\ndate: {date_today.strftime(format)}"}
+                    send_message_to_channel(name, body['text'])
+                elif stock_text == "" and store_id in stores_in_stock:
+                    stores_in_stock.remove(store_id)
+            except:
+                continue
+
 def run_walmart_bot(skus):
     skus_in_stock = set()
     while True:
@@ -519,7 +591,9 @@ def run_amd_queue_bot():
                     link2 = "https://www.amd.com/en/direct-buy/us"
                     date_today = datetime.now(tz=pytz.utc)
                     date_today = date_today.astimezone(timezone('US/Pacific'))
-                    msg = f"AMD queue started or may start in 30 minutes\n{link2}\ndate: {date_today.strftime(format)}"
+                    start_time = soup.find('span', {'id': 'MainPart_lbEventStartTime'}).text
+                    zone = soup.find('span', {'id': 'MainPart_lbEventStartTimeTimeZonePostfix'}).text
+                    msg = f"AMD queue starts at {start_time} {zone}, queue up now!\n{link2}\ndate: {date_today.strftime(format)}"
                     client.chat_postMessage(channel='C02CELT8CJU', text=msg)
                 elif not queue_started and already_started:
                     already_started = False
@@ -549,6 +623,8 @@ if __name__ == "__main__":
         run_target_bot(skus, '81114595')
     elif site == "tgt_digital":
         run_target_bot(skus, '81114596')
+    elif site == "tgt":
+        run_target_bot2(skus)
     elif site == "walmart":
         run_walmart_bot(skus)
     elif site == "adorama":
