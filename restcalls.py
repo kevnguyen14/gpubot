@@ -42,7 +42,8 @@ channels = {
     'ps5': 'C026T3B93K6',
     'xbox': 'C02CPEHLZEW'
 }
-client = 
+client = WebClient(
+    token=
 
 def send_message_to_channel(name: str, msg: str, sku=None):
     client.chat_postMessage(channel=channels['all-drops'],
@@ -193,11 +194,15 @@ def run_gs_bot(skus):
 
 def run_amazon_bot(skus):
     skus_in_stock = set()
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.107 Safari/537.36 Edg/92.0.902.55',
+        'Cache-Control': 'no-cache'
+    }
     while True:
         for sku in skus:
             try:
                 link = f"https://www.amazon.com/dp/{sku}"
-                response = requests.get(link, headers=headers, timeout=10)
+                response = requests.get(link, headers=headers, cookies={'session-id':''}, timeout=10)
                 soup = BeautifulSoup(response.text)
                 btns = soup.find_all('input', {'id': 'add-to-cart-button'})
                 buy_box = soup.find("span", {"id": "tabular-buybox-truncate-1"})
